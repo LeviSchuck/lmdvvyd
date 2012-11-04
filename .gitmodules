@@ -1,0 +1,3 @@
+[submodule "cordite-libs"]
+	path = cordite-libs
+	url = https://github.com/kloplop321/cordite-libs.git
