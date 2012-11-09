@@ -29,7 +29,8 @@ endif(USE_CXX_11)
 
 add_subdirectory(cordite-libs)
 
-add_subdirectory(source)
+add_subdirectory(server)
+add_subdircetory(client)
 
 
 
