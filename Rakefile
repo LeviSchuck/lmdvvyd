@@ -9,16 +9,17 @@ desc "Creates a class in the designated location"
 task :mkclass do
 	name = ENV["name"] || ""
 	abort("No 'name' given!") unless name.length > 0
-	location = ENV["loc"] || ""
+	location = ENV["loc"] || "."
 	abort("No 'loc' given!") unless location.length > 0
 	project = ENV["proj"] || ""
 	abort("No 'proj' given!" ) unless project.length > 0
+	masterproject = "lmdvvyd"
 	
 	namespace = ENV["ns"] || ""
 	if namespace.length > 0
-		namespace = "cordite::#{namespace}"
+		namespace = "cordite::#{masterproject}::#{namespace}"
 	else
-		namespace = "cordite"
+		namespace = "cordite::#{masterproject}"
 	end
 	abort("Namespace 'ns' should NOT have whitespace!") unless ! namespace.match(/\s/)
 	namespaces = namespace.split("::")
