@@ -172,6 +172,11 @@ An _STL_ map will be used for the following
 + **Key: Integer Mask**
 	Value: Actor
 
+Furthermore, _Property Sets_ will contain a list of client identifiers
+which will be used to broadcast to the clients the change.
+
+These client identifiers are populated on client connection with what they register with.
+
 ####Relations
 
 A **Property** holds a contract, and references to all property sets which contain it.
@@ -180,6 +185,15 @@ A **Property Set** holds a reference to all entities which have them.
 
 An **Actor** holds references to entities which they own.
 
+###Client Registration
+***TODO***
+
+###Resolving Events
+***TODO***
+
+##Client
+
+***TODO***
 
 #Implementation and results
 ##Templated Set
@@ -290,4 +304,5 @@ The good news is that we don't care about a full instantiated powerset! We only 
 So far, this is good enough, though I'll still want to not do this as often as I can.
 
 ##Server
-_In Progress_
+_Progress Pending_
+
