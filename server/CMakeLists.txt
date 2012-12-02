@@ -6,7 +6,10 @@ include_directories(${YAML_INCLUDE})
 
 # Begin Soures
 set(SERVER_SRC "")
-list(APPEND SERVER_SRC main.cpp)
+list(APPEND SERVER_SRC main.cpp 
+../include/set.hpp 
+../include/entity.hpp
+)
 
 # End Sources
 #------------------------------------------------------

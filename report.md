@@ -1,0 +1,293 @@
+#Definitions
+
+**Entity**: A positive, unique number that pertains to a reference of something, which is constructed with properties and attributes.
+
+**Property**: A textual name, which may also be rendered to a 32 bit or 64 bit integer, which identifies some categorical group. A mapping may exist from a property to a property contract.
+
+**Property Contract**: A configuration of names (which may be rendered as a 32 bit or 64 bit integer) and enumeration entries defining the type for properties. A default is also specified.
+
+**Attribute Value**: a typed value and the enumeration for the type.
+
+**Attribute Wrapping**: The Attribute Value and the name which may be a string and or a 32 bit or 64 bit integer.
+
+**Component**: Code associated to a non-empty set of properties, which acts on all entities which have a subset of properties equal to the components properties, using the attributes provided by the Property Contract.
+
+**System**: A collection of related Components, subsystems, libraries, assistants and wrappers.
+
+**Library**: A discrete collection of related code that computes and or interacts with the user.
+
+**Assistant**: A collection of related routines which are optimized for some operation.
+
+**Wrapper**: Acts as an abstraction to the rest of the system for an external library. 
+
+#Design
+
+The data server is a thread or process that interacts with the host game, and for local instances which have their own independent server. 
+
+To remain within an achievable scope, this design will not take into account sharding, distribution, etc. All data replication and authentication is to be done by an external server. 
+
+##Requirements
+
+###Actors
+
+Actors must be **retained** and **separately selectable**, the actor is to be _embedded in the Entity ID_.
+This can be supplemented by having an additional entity, where the type is a key value pair of the actor ID and an array of entitites.
+
+###Data
+
++ A list of Entity IDs
++ A property in string and possibly numeric _(hash)_ form.
++ Attribute Value
++ Attribute Wrappers for Stringed names and integral names.
++ Property Contract Definition
++ Contract Field
++ Complete Entity, using String Names
+
+###Events
+
+**Server to Client** and **Client to Server**
+
++ Entity Attributes Changed
++ Entity Created
++ Entity Property Added
++ Entity Property Removed
++ Entity Changing ID
+
+**Client to Server**
+
++ Entity Destroyed
++ Property Set is listened to, _server keeps a ref count_
++ Property Set is no longer listened to
+
+###Transport
+
+Ideally, Listen and operate on a single port.
+
+###Server Side
+
+Must be able to serialize selectively, and be able to unserialize and instantiate batches.
+Any data that conflicts will be dropped and created from the batch, never merged for a batch.
+
+Have Configurable 
+
++ Port_(s)_
++ Number of Worker instances, _when allowing external communication_
+
+The server will offer interprocess and inprocess channels for communication.
+The names will be constant, for now only one server at a time is considered.
+
+###Client Side
+
+The client side needs an interface to fetch the following
+Entities by ID in batch
+All Entities containing a set of properties
+
+The client side needs to be able to subscribe to the following
+
++ Entity Attribute Changed, by a set of Properties. 
++ Entity Created, by a set of Properties
++ Entity removed by a set of Properties
++ **Entity changing IDs**
+
+Entity Destruction and entity removed are the same to a component on the client side. The client issues a command for destruction.
+
+There is a client context, which handles communication with the server or service, including the transport option. The context will offer a means for specialized context instances, used for _components_.
+
+##Data Structure
+
+###Property
+
+Holds contracts and references to sets which are contracted with it. 
+
+The Contract holding a list of attribute templates being
+
++ Name
++ Default value
++ Type, _though the type is implicit in the default value_
++ Contracted Reference Sets,
+	_An array of sets which include this property. 
+	Used for updating when the contract definition is augmented._
+
+###Property Set
+
+Holds the information which reading queries hit as a pivot before grabbing the entities.
+
++ Set of properties that compose this set
++ A set of Entity IDs
++ Cached Property Contract, _same format as in the Property Data Structure_
++ Property Definition
+
+###Entity
+
+Holds the actual data contents that the user expects.
+
++ Entity ID
++ Set of Properties
++ Set of Attributes
+
+
+#Plans of Implementation
+
+##Support
+
+###Templated Set class
+Which supports
+
++ Union
++ Intersection
++ Difference
++ Symmetric Difference
++ Powerset
+
+The first four operations are already in the standard library, however they are not built into the existing set class. 
+They operate efficiently on sorted iterable objects, such as vector. 
+
+Powerset needs to be efficient. Also, there needs to be an **iterable** powerset, without generating the entire powerset.
+
+##Server
+There is a singleton **Server Manager** which is manages configuration, start up, shut down. This manager is what the embedded application, or standalone executable uses.
+
+The Server Manager controls the number of available workers, backend engine, and the communication settings.
+Inprocess communication will always be available, interprocess and network communication is something that must be explicitly enabled.
+
+The ZeroMQ sockets can bind to multiple methods I believe, so the distinction between which is not known nor important to the server.
+
+Most of the design has been purposefully made to be asynchronous, the events can be sent out through a publication-subscribe pattern. Listening to events will be similar, the clients push messages out, expecting that the context will deliver them and the server process them.
+
+###Backend
+The backend engine inherits an interface which is used by workers and embedded applications. A parameter at startup is given by name which selects the engine to use.
+
+An initial naïve approach will be implemented using locks. **Poco Foundation** provides read-write locks which are adequate for this.
+
+Eventually, a lock-free or minimal locking design would be desired. 
+
+An _STL_ map will be used for the following
+
++ **Key: String**;
+	Value: Property
++ **Key: String Set**;
+	Value: Property Set
++ **Key: Integer**;
+	Value: Entity
++ **Key: Integer Mask**
+	Value: Actor
+
+####Relations
+
+A **Property** holds a contract, and references to all property sets which contain it.
+
+A **Property Set** holds a reference to all entities which have them.
+
+An **Actor** holds references to entities which they own.
+
+
+#Implementation and results
+##Templated Set
+The `cordite::set<T>` class has been made and allows for arbitrary types and chained functions.
+Move semantics are available and it is seemingly fast..
+
+The members that go in need to be comparable. 
+
+At first I implemented, incorrectly, a translation of the `C++` example on rosetta code. It doesn't work for sizes > 3. Then I tried doing a for-each based version which the `D` example had.
+Although each step I took cut off a digit, it was still not all that efficient, so I came up with a near-binary like version which after analyzation of a simulation of a 5 sized set, I came up with a way to generate sorted combinations of increasing size.
+
+This is what is used now, though the for-each code has been left for educational purposes.
+
+Now that I have powerset working, I should be able to continue on with making the headers for the classes I'm thinking about.
+
+Here are some statistics.. 
+
+    Took avg: __0ms	_____0µs	______917ns		for 1 items.
+    Took avg: __0ms	_____6µs	_____6601ns		for 2 items.
+    Took avg: __0ms	_____6µs	_____6820ns		for 3 items.
+    Took avg: __0ms	____18µs	____18591ns		for 4 items.
+    Took avg: __0ms	____78µs	____78385ns		for 5 items.
+    Took avg: __0ms	___107µs	___107938ns		for 6 items.
+    Took avg: __0ms	___254µs	___254422ns		for 7 items.
+    Took avg: __0ms	___390µs	___390977ns		for 8 items.
+    Took avg: __0ms	___987µs	___987951ns		for 9 items.
+    Took avg: __1ms	__1415µs	__1415170ns		for 10 items.
+    Took avg: __2ms	__2861µs	__2861457ns		for 11 items.
+    Took avg: __4ms	__4843µs	__4843092ns		for 12 items.
+    Took avg: _10ms	_10699µs	_10699752ns		for 13 items.
+    Took avg: _22ms	_22643µs	_22643424ns		for 14 items.
+    Took avg: _51ms	_51293µs	_51293338ns		for 15 items.
+    Took avg: _86ms	_86462µs	_86462578ns		for 16 items.
+    Took avg: 192ms	192509µs	192509066ns		for 17 items.
+    Took avg: 408ms	408415µs	408415512ns		for 18 items.
+    Took avg: 839ms	839028µs	839028897ns		for 19 items
+    Took avg: 1861ms		   1861842241ns		for 20 items.
+	
+Exponential regression yields `1.1029*e^(0.7153x) µs`, where x is the number of items, with an `R^2` of `0.998`.
+
+Memory-wise, it looks like this..
+
+![](http://i.imgur.com/Ik4mc.png)
+
+Which means that I don't have leaks, however my temporaries looks like they could be used better.
+
+Ah… Found the reason! I was preallocating `n^2` instead of `2^n`! And now it looks like
+![](http://i.imgur.com/hDmPP.png)
+
+And as you can see, it takes less time for the 4th hump which is the last hump in the fist image, since there's not as much reallocation!
+
+And now it looks like…
+
+    Took avg: ____0ms _______1µs ________1107ns for 1 items.
+    Took avg: ____0ms _______3µs ________3033ns for 2 items.
+    Took avg: ____0ms _______6µs ________6888ns for 3 items.
+    Took avg: ____0ms ______16µs _______16737ns for 4 items.
+    Took avg: ____0ms ______36µs _______36742ns for 5 items.
+    Took avg: ____0ms ______67µs _______67964ns for 6 items.
+    Took avg: ____0ms _____141µs ______141494ns for 7 items.
+    Took avg: ____0ms _____420µs ______420110ns for 8 items.
+    Took avg: ____0ms _____553µs ______553930ns for 9 items.
+    Took avg: ____1ms ____1117µs _____1117726ns for 10 items.
+    Took avg: ____2ms ____2632µs _____2632462ns for 11 items.
+    Took avg: ____4ms ____4196µs _____4196907ns for 12 items.
+    Took avg: ____8ms ____8466µs _____8466593ns for 13 items.
+    Took avg: ___16ms ___16738µs ____16738037ns for 14 items.
+    Took avg: ___35ms ___35585µs ____35585214ns for 15 items.
+    Took avg: ___72ms ___72747µs ____72747781ns for 16 items.
+    Took avg: __159ms __159790µs ___159790957ns for 17 items.
+    Took avg: __329ms __329911µs ___329911550ns for 18 items.
+    Took avg: __658ms __658388µs ___658388587ns for 19 items.
+    Took avg: _1359ms _1359292µs __1359292657ns for 20 items.
+
+Which is considerable improvement!
+
+For the iterable powerset, here are the following stats.
+
+    Took avg: ____0ms _______2µs ________2966ns for 1 items.
+    Took avg: ____0ms _______2µs ________2967ns for 2 items.
+    Took avg: ____0ms _______4µs ________4396ns for 3 items.
+    Took avg: ____0ms _______6µs ________6367ns for 4 items.
+    Took avg: ____0ms ______10µs _______10459ns for 5 items.
+    Took avg: ____0ms ______19µs _______19835ns for 6 items.
+    Took avg: ____0ms ______53µs _______53041ns for 7 items.
+    Took avg: ____0ms _____101µs ______101283ns for 8 items.
+    Took avg: ____0ms _____172µs ______172787ns for 9 items.
+    Took avg: ____0ms _____430µs ______430466ns for 10 items.
+    Took avg: ____0ms _____921µs ______921839ns for 11 items.
+    Took avg: ____1ms ____1874µs _____1874373ns for 12 items.
+    Took avg: ____3ms ____3737µs _____3737168ns for 13 items.
+    Took avg: ____8ms ____8165µs _____8165788ns for 14 items.
+    Took avg: ___16ms ___16678µs ____16678161ns for 15 items.
+    Took avg: ___36ms ___36463µs ____36463787ns for 16 items.
+    Took avg: ___81ms ___81322µs ____81322017ns for 17 items.
+    Took avg: __160ms __160378µs ___160378532ns for 18 items.
+    Took avg: __340ms __340493µs ___340493143ns for 19 items.
+    Took avg: __758ms __758227µs ___758227067ns for 20 items.
+
+Here I have the allocation graph for 2 instances of Power set generation, and two instances of powerset iteration, side by side.
+The memory foot print is obvious, and the time it takes is also obvious, though because of profiling, the allocation and deallocation times are exaggerated.
+
+![](http://i.imgur.com/1PYaD.png)
+
+According to the tables above, it is obvious that iteration is faster! Though it is still inherently exponential.
+The good news is that we don't care about a full instantiated powerset! We only care about iterating over it!
+
+So far, this is good enough, though I'll still want to not do this as often as I can.
+
+##Server
+_In Progress_
