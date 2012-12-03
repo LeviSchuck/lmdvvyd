@@ -186,7 +186,27 @@ A **Property Set** holds a reference to all entities which have them.
 An **Actor** holds references to entities which they own.
 
 ###Client Registration
-***TODO***
+Clients will connect using a PAIR socket, the server will always have one socket open not being used, once it is connected to, another thread is created which hosts another socket.
+
+On registration, the database will give the client an identifier and a key, the two are sent back with each message. 
+Once the client gets its updating credentials, it will then notify the server of all the contracts that it has.
+The contracts are transactional, meaning that until it is determined that all contracts will not conflict with existing contracts, their contracts will not be merged into the database.
+
+The database will reply that an exception has occurred and it is up to the client application to handle it.
+The client library _(not the application)_ should throw an exception or have a status code available.
+
+The client library, _which at this point already has internal registration done_, first registers to the server and obtain its identification and key, then it attempts to register all the contracts it is aware of. 
+
+###Client Unregistration
+We detect unregistration normally by message, however we will want to have a try-catch since disconnections, using the C++ API seem to throw the `zmq::error_t` type which is derived from `std::exception`. 
+
+Exception-caused unregistration will be deferred and scheduled, according to configuration but by default maybe **5 minutes** later, giving a large window for reconnecting. The client should have an exception as well, so it should have a mechanism for collecting and trying to connect back.
+
+Proper Unregistration will remove all the markers for _actor dependencies_ in all property sets, and given a flag, will remove all entities under that actor's ownership.
+
+The table of actors **will not** release the ID and key, in case ownership comes back much later. With 64 bit numbers, it is unlikely to exhaust it. 
+
+The entities within the actor's ownership will remain stagnant if the client does not explicitly specify to remove them, it is up to a master controller to devise policy for removing them. 
 
 ###Resolving Events
 ***TODO***
@@ -268,7 +288,7 @@ And now it looks like…
     Took avg: __658ms __658388µs ___658388587ns for 19 items.
     Took avg: _1359ms _1359292µs __1359292657ns for 20 items.
 
-Which is considerable improvement!
+Which is considerable improvement! `0.8036*e^(.7191x)` is the current trend.
 
 For the iterable powerset, here are the following stats.
 
@@ -292,6 +312,8 @@ For the iterable powerset, here are the following stats.
     Took avg: __160ms __160378µs ___160378532ns for 18 items.
     Took avg: __340ms __340493µs ___340493143ns for 19 items.
     Took avg: __758ms __758227µs ___758227067ns for 20 items.
+
+The trend for iteration is: `0.4056*e^(.7097x)`, 
 
 Here I have the allocation graph for 2 instances of Power set generation, and two instances of powerset iteration, side by side.
 The memory foot print is obvious, and the time it takes is also obvious, though because of profiling, the allocation and deallocation times are exaggerated.
