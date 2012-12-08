@@ -20,6 +20,8 @@
 
 **Wrapper**: Acts as an abstraction to the rest of the system for an external library. 
 
+**Actor**: An active client that listens and emits and can be individually identified.
+
 #Design
 
 The data server is a thread or process that interacts with the host game, and for local instances which have their own independent server. 
@@ -31,7 +33,7 @@ To remain within an achievable scope, this design will not take into account sha
 ###Actors
 
 Actors must be **retained** and **separately selectable**, the actor is to be _embedded in the Entity ID_.
-This can be supplemented by having an additional entity, where the type is a key value pair of the actor ID and an array of entitites.
+This can be supplemented by having an additional entity, where the type is a key value pair of the actor ID and an array of entities.
 
 ###Data
 
@@ -73,7 +75,7 @@ Have Configurable
 + Port_(s)_
 + Number of Worker instances, _when allowing external communication_
 
-The server will offer interprocess and inprocess channels for communication.
+The server will offer interprocess and in-process channels for communication.
 The names will be constant, for now only one server at a time is considered.
 
 ###Client Side
@@ -147,15 +149,15 @@ Powerset needs to be efficient. Also, there needs to be an **iterable** powerset
 ##Server
 There is a singleton **Server Manager** which is manages configuration, start up, shut down. This manager is what the embedded application, or standalone executable uses.
 
-The Server Manager controls the number of available workers, backend engine, and the communication settings.
-Inprocess communication will always be available, interprocess and network communication is something that must be explicitly enabled.
+The Server Manager controls the number of available workers, back-end engine, and the communication settings.
+In-process communication will always be available, interprocess and network communication is something that must be explicitly enabled.
 
 The ZeroMQ sockets can bind to multiple methods I believe, so the distinction between which is not known nor important to the server.
 
 Most of the design has been purposefully made to be asynchronous, the events can be sent out through a publication-subscribe pattern. Listening to events will be similar, the clients push messages out, expecting that the context will deliver them and the server process them.
 
-###Backend
-The backend engine inherits an interface which is used by workers and embedded applications. A parameter at startup is given by name which selects the engine to use.
+###Back-end
+The back-end engine inherits an interface which is used by workers and embedded applications. A parameter at startup is given by name which selects the engine to use.
 
 An initial naïve approach will be implemented using locks. **Poco Foundation** provides read-write locks which are adequate for this.
 
@@ -208,8 +210,21 @@ The table of actors **will not** release the ID and key, in case ownership comes
 
 The entities within the actor's ownership will remain stagnant if the client does not explicitly specify to remove them, it is up to a master controller to devise policy for removing them. 
 
-###Resolving Events
-***TODO***
+##Event Resolution
+Events are supposed to be distributed to only those that care. I do not want to have mass duplication and validation, in order to to do so, the source that emits needs to have some form of awareness of what will subscriptions exist.
+
+My aim is a tiered awareness at the server and client levels. _Note, the term client refers to the library  that couples with the server, client does not refer to the actual application._
+
+The server will be aware of the property sets the client is interested in. Dependencies will simply be which client to send to. When change events occur, a set is computed being the union of all _owning_ properties for each modified attribute. Using the precalculated dependencies, either a custom generated attribute collection will be formed from the contract which this unioned set has, or the full entity will be sent, depending on the size and what the configuration specifies as a threshold. 
+_(For example, suppose there's a descriptor field, which has 512KB of text in it, it wasn't changed, and it is its own property. There's no reason to send it back, nothing will read it.)_
+The server will have two different kinds of sets. Data oriented, and event oriented. Data oriented sets are what have references to entities. All sets that have no references are considered event oriented. Event oriented exist to hold a cached set of dependent actors for which to send messages to. In an optimal situation, these are all created on initiation. _I believe it would be ideal to have a logging mechanism in place to record when event oriented sets are created at runtime._
+Dependency calculation is iterating a powerset and unioning all the actors from all subsets, this is not a cheap initiation, as seen in the implementation section.
+
+The client will be aware of all the components, dependencies are also precalculated on initiation, however initiation of another component can happen at runtime, _though it is not likely that such will be done except in live development._
+A similar pattern is followed with data oriented, and event oriented sets. Instead of actors, component client context references are kept, where a reference to the change is deposited.
+
+I'm thinking of using atomic reference counting on the data portion and passing an immutable reference to all client contexts for them to later process. This supposes that a registered client context will eventually be processed. **For now, concerning sleeping contexts, this will not be considered.** 
+
 
 ##Client
 
@@ -260,12 +275,12 @@ Memory-wise, it looks like this..
 
 Which means that I don't have leaks, however my temporaries looks like they could be used better.
 
-Ah… Found the reason! I was preallocating `n^2` instead of `2^n`! And now it looks like
+Ah... Found the reason! I was preallocating `n^2` instead of `2^n`! And now it looks like
 ![](http://i.imgur.com/hDmPP.png)
 
 And as you can see, it takes less time for the 4th hump which is the last hump in the fist image, since there's not as much reallocation!
 
-And now it looks like…
+And now it looks like...
 
     Took avg: ____0ms _______1µs ________1107ns for 1 items.
     Took avg: ____0ms _______3µs ________3033ns for 2 items.
