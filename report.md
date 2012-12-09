@@ -72,7 +72,7 @@ Any data that conflicts will be dropped and created from the batch, never merged
 
 Have Configurable 
 
-+ Port_(s)_
++ Port(s)
 + Number of Worker instances, _when allowing external communication_
 
 The server will offer interprocess and in-process channels for communication.
