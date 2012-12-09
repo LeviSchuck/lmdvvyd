@@ -228,7 +228,66 @@ I'm thinking of using atomic reference counting on the data portion and passing 
 
 ##Client
 
-***TODO***
+The client library which couples with the database will need to have a few soft stages in its design.
+
++ Initiate Local Contracts
++ Initiate Potential Event paths _for precalculated event resoluton_
++ Runtime Configuration
+
+Although contract creation and event resolution can happen at runtime, it should be logged and later put integrated into the initiation process as to not cause lag for the subsystem. This is not likely possible to enforce for when other peers to the database which have different directives produce events that are not expected. For a game this behavior is extremely unlikely.
+
+The Client library needs to provide a Master context which connects to the database server / service. This library runs in its own thread. The master context needs to provide contexts meant for component instances, which listen and emit events regarding entities. The Master context needs to be thread safe.
+
+The Component Context, which is a not-necessarily-thread-safe object which belongs to each component instance. It communicates with the master context. It receives information from the thread which the master context resides in. It can emit information to the master context from the thread which the component instance resides in.
+
+It is the assumption that components will eventually be processed, that is, they will processed within a matter of frames. Each client context has its buffer which the master context deposits messages to. It may be considered a memory leak if the client context is never read, it should be destroyed. It is up to the client application to properly handle these. Having a sleep flag would only provide usefulness if during sleep, a record was kept of only unique entity IDs which changed, and then upon wake, it would request those entities back as current change events. **However, this is beyond the scope of this first version.**
+
+There should exist the master context which has the following callable things for general use.
+
++ Configure
++ Connect and initialize and start,
+    _This will throw an exception if there is a conflict with the contracts._
++ Halt,
+    _Used to end and clean up._
+
+It can be considered an [Active Object](http://en.wikipedia.org/wiki/Active_object), though most of these are asynchronous.
+For use with the component context, it has the following callable things.
+
++ Register component context
++ Unregister component context
++ Emit entity change
++ Emit Entity Created
++ Emit Entity Destroyed
++ Emit Entity ID change
++ Emit Entity Property Added
++ Emit Entity Property Removed
+
+All the _Emit_ methods also take the identification of the component, which needs to be unique per component per machine (which [UUIDs](http://en.wikipedia.org/wiki/Universally_unique_identifier) would be appropriate for) as to avoid feedback.
+
+This means, at least, that the component contexts should have their own UUID, instead of enforcing the user to provide one.
+
+Furthermore, from the Master Context to the component context, the following callable things need to be present.
+
++ Receive entity change
++ Receive Entity ID change
++ Receive Entity Property Added
++ Receive Entity Property Removed
+
+_Notice that there's no destruction or creation. These can be synonymous and should be to property additions and subtractions._
+
+From the Component to the component context, the following callable things need to be present.
+
++ Iterate Entity Changes
++ Iterate Entity Property added
++ Iterate Entity Property removed
++ Iterate Entity ID change
+
+To clarify, the _Property added_ means that the entity has **joined** this specific component's jurisdiction, similar applies to _Property removed_.
+
+Iterating should be **destructive!** Also, the contents being iterated should be thread safe when the master context places new data. Thus the iterating should not be modified externally. I propose swapping storage structures for where the master context dumps to. There is no situation where multiple iterations will be happening in different threads.
+
+> I'm also pondering, since I plan to use reference counting for the actual data, should the destructor happen in the last-owning thread, or should it be placed into a thread-safe queue which is processed in a separate dedicated thread for memory management? It might be easier to debug and log if it is placed in its own thread.
+
 
 #Implementation and results
 ##Templated Set
